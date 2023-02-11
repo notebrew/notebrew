@@ -56,6 +56,7 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if r.Form.Has("edit") {
+				// err := server.Render(w, "html/edit_note.html", nil)
 				tmpl, err := template.ParseFiles("html/edit_note.html")
 				if err != nil {
 					server.Error(w, r, http.StatusInternalServerError, err)
