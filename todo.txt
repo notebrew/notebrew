@@ -2,35 +2,17 @@
 /login
 /logout
 /register
-/static/** servers everything in the static directory
+/static/* serves everything in the static directory
+
+note/<noteID>
+post/<postID>
+blog/<blogID>
+image/<imageID>
 
 /u/* redirects to /user/*
 /user/ redirects to /user/<user_id>/ if logged in, / if not
 /user/<user_id>/* 404s
 /user/<user_id>/ renders the user information
-
-dynurl.Redirect()
-dynurl.Parse(r.URL.Path)
-
-m := dynurl.Matcher()
-m.Add()
-m.Add()
-m.Match(
-    "/user": nil,
-    "/user/?": []any{&userID},
-)
-m := dynurl.Matcher{
-}
-match, err := dynurl.Path("/user").Path("/user/?").Match(r.URL.Path)
-if err != nil {
-}
-dynurl.Path().Match()
-m.Match(r.URL.Path)
-ok := dynurl.Match("/user/{user_id}", &userID)
-if !ok {
-    http.NotFound(w, r)
-    return
-}
 
 /n/* redirects to /note/*
 /note/ renders the list of all the notes
@@ -42,3 +24,16 @@ if !ok {
 Read(name string) ([]byte, error)
 Write(name string, data []byte) error
 Remove(name string)
+
+Open() (fs.File, error)
+
+type FS interface{
+    Open() (fs.File, error)
+    OpenWriter() (io.WriteCloser, error)
+}
+
+type File interface{
+    Read(p []byte) (n int64, error)
+    Write(p []byte) (n int64, error)
+    Close() error
+}

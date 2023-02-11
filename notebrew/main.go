@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bokwoon95/sqddl/ddl"
 	"github.com/bokwoon95/sqddl/drivers/ddlpostgres"
@@ -17,7 +19,7 @@ import (
 )
 
 var (
-	dsn       = flag.String("db", "notebrew.db", "Data Source Name")
+	dsn       = flag.String("db", "notebrew-data/notebrew.db", "Data Source Name")
 	secretKey = flag.String("key", "lorem ipsum dolor sit amet", "Secret Key")
 )
 
@@ -30,6 +32,12 @@ func init() {
 
 func main() {
 	dialect, driverName, normalizedDSN := ddl.NormalizeDSN(*dsn)
+	if dialect == "sqlite" {
+		err := os.MkdirAll(filepath.Dir(normalizedDSN), 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	db, err := sql.Open(driverName, normalizedDSN)
 	if err != nil {
 		log.Fatal(err)
@@ -41,7 +49,8 @@ func main() {
 	server := &notebrew.Server{
 		DB:      db,
 		Dialect: dialect,
-		Notes:   notebrew.DirStore("note"),
+		NoteFS:  notebrew.NestedDirFS("notebrew-data/note"),
+		ImageFS: notebrew.NestedDirFS("notebrew-data/image"),
 	}
 	kdf := hkdf.New(sha256.New, []byte(*secretKey), nil, nil)
 	_, err = io.ReadFull(kdf, server.SigningKey[:])

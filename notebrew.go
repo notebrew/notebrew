@@ -29,13 +29,9 @@ import (
 type Server struct {
 	DB         *sql.DB
 	Dialect    string
-	DataDir    fs.FS
 	SigningKey [32]byte
-	Notes      Store
-	// TODO: figure out the proper interface for a writable FS. And then create
-	// a custom filesystem wrapper that additionally looks up a folder first
-	// using the last 2 characters of a file id before locating the file
-	// itself.
+	NoteFS     FS
+	ImageFS    FS
 }
 
 func (server *Server) Redirect(w http.ResponseWriter, r *http.Request, destURL string, data any) {
@@ -215,35 +211,44 @@ func (server *Server) CurrentUserID(r *http.Request) (ulid.ULID, bool) {
 	return userID, true
 }
 
-type Store interface {
-	Read(name string) ([]byte, error)
-	Write(name string, data []byte) error
-	Remove(name string) error
+type FS interface {
+	Open(name string) (fs.File, error)
+	OpenWriter(name string) (io.WriteCloser, error)
 }
 
-type dirStore string
-
-func DirStore(dir string) Store {
-	return dirStore(dir)
+type dirFS struct {
+	dir    string
+	nested bool
 }
 
-func (dir dirStore) Read(name string) ([]byte, error) {
-	if len(name) != 26 {
-		return nil, fmt.Errorf("invalid name length")
+func DirFS(dir string) FS {
+	return dirFS{dir: dir}
+}
+
+func NestedDirFS(dir string) FS {
+	return dirFS{dir: dir, nested: true}
+}
+
+func (d dirFS) Open(name string) (fs.File, error) {
+	if len(name) < ulid.EncodedSize {
+		return nil, fmt.Errorf("invalid name")
 	}
-	return os.ReadFile(path.Join(string(dir), name[len(name)-2:], name+".txt"))
+	if d.nested {
+		name = path.Join(name[ulid.EncodedSize-2:ulid.EncodedSize], name)
+	}
+	return os.Open(path.Join(d.dir, name))
 }
 
-func (dir dirStore) Write(name string, data []byte) error {
-	if len(name) != 26 {
-		return fmt.Errorf("invalid name length")
+func (d dirFS) OpenWriter(name string) (io.WriteCloser, error) {
+	if len(name) < ulid.EncodedSize {
+		return nil, fmt.Errorf("invalid name")
 	}
-	return os.WriteFile(path.Join(string(dir), name[len(name)-2:], name+".txt"), data, 0644)
-}
-
-func (dir dirStore) Remove(name string) error {
-	if len(name) != 26 {
-		return fmt.Errorf("invalid name length")
+	if d.nested {
+		name = path.Join(name[ulid.EncodedSize-2:ulid.EncodedSize], name)
 	}
-	return os.Remove(path.Join(string(dir), name[len(name)-2:], name+".txt"))
+	err := os.MkdirAll(d.dir, 0755)
+	if err != nil {
+		return nil, err
+	}
+	return os.OpenFile(path.Join(d.dir, name), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 }

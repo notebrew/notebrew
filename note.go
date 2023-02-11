@@ -2,7 +2,10 @@ package notebrew
 
 import (
 	"bytes"
+	"errors"
 	"html/template"
+	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"path"
@@ -32,14 +35,23 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "GET" {
 		if len(segments) == 2 {
-			noteID := segments[1]
-			_, err := strconv.Atoi(noteID)
+			noteNumber := segments[1]
+			_, err := strconv.Atoi(noteNumber)
 			if err != nil {
 				server.Error(w, r, http.StatusNotFound, nil)
 				return
 			}
-			b, err := server.Notes.Read(path.Join(strings.ToLower(currentUserID.String()), noteID))
-			_, err = w.Write(b)
+			noteID := strings.ToLower(currentUserID.String()) + "-" + noteNumber
+			file, err := server.NoteFS.Open(noteID)
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					server.Error(w, r, http.StatusNotFound, nil)
+					return
+				}
+				server.Error(w, r, http.StatusInternalServerError, err)
+				return
+			}
+			_, err = io.Copy(w, file)
 			if err != nil {
 				log.Println(err)
 			}
@@ -79,22 +91,28 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 		server.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
-	noteID := segments[1]
-	_, err := strconv.Atoi(noteID)
+	noteNumber := segments[1]
+	_, err := strconv.Atoi(noteNumber)
 	if err != nil {
 		server.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r.Body)
+	noteID := strings.ToLower(currentUserID.String()) + "-" + noteNumber
+	writer, err := server.NoteFS.OpenWriter(noteID)
 	if err != nil {
 		server.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	err = server.Notes.Write(path.Join(strings.ToLower(currentUserID.String()), noteID), buf.Bytes())
+	defer writer.Close()
+	_, err = io.Copy(writer, r.Body)
 	if err != nil {
 		server.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	http.Redirect(w, r, "/note/"+noteID, http.StatusFound)
+	err = writer.Close()
+	if err != nil {
+		server.Error(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	http.Redirect(w, r, "/note/"+noteNumber, http.StatusFound)
 }
