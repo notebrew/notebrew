@@ -34,6 +34,10 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
+		err := r.ParseForm()
+		if err != nil {
+			log.Println(err)
+		}
 		if len(segments) == 2 {
 			noteNumber := segments[1]
 			_, err := strconv.Atoi(noteNumber)
@@ -51,23 +55,33 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 				server.Error(w, r, http.StatusInternalServerError, err)
 				return
 			}
+			if r.Form.Has("edit") {
+				tmpl, err := template.ParseFiles("html/edit_note.html")
+				if err != nil {
+					server.Error(w, r, http.StatusInternalServerError, err)
+					return
+				}
+				var buf bytes.Buffer
+				err = tmpl.Execute(&buf, nil)
+				if err != nil {
+					server.Error(w, r, http.StatusInternalServerError, err)
+					return
+				}
+				_, err = buf.WriteTo(w)
+				if err != nil {
+					log.Println(err)
+				}
+				return
+			}
 			_, err = io.Copy(w, file)
 			if err != nil {
 				log.Println(err)
 			}
 			return
 		}
-		err := r.ParseForm()
-		if err != nil {
-			log.Println(err)
-		}
-		isNew := r.Form.Has("new")
-		isEdit := r.Form.Has("edit")
 		filename := "html/notes.html"
-		if isNew {
+		if r.Form.Has("new") {
 			filename = "html/new_note.html"
-		} else if isEdit {
-			filename = "html/edit_note.html"
 		}
 		tmpl, err := template.ParseFiles(filename)
 		if err != nil {
