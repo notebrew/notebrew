@@ -1,0 +1,44 @@
+/error
+/login
+/logout
+/register
+/static/** servers everything in the static directory
+
+/u/* redirects to /user/*
+/user/ redirects to /user/<user_id>/ if logged in, / if not
+/user/<user_id>/* 404s
+/user/<user_id>/ renders the user information
+
+dynurl.Redirect()
+dynurl.Parse(r.URL.Path)
+
+m := dynurl.Matcher()
+m.Add()
+m.Add()
+m.Match(
+    "/user": nil,
+    "/user/?": []any{&userID},
+)
+m := dynurl.Matcher{
+}
+match, err := dynurl.Path("/user").Path("/user/?").Match(r.URL.Path)
+if err != nil {
+}
+dynurl.Path().Match()
+m.Match(r.URL.Path)
+ok := dynurl.Match("/user/{user_id}", &userID)
+if !ok {
+    http.NotFound(w, r)
+    return
+}
+
+/n/* redirects to /note/*
+/note/ renders the list of all the notes
+/note/<id>/ renders note <id>
+/note/*
+/note/?new renders a form to create a new note. It does a POST to /note/ and redirects to /note/<id>/
+/note/<id>/?edit renders a form to edit note <id>. It does a POST to /note/<id> and redirects to /note/<id>/
+
+Read(name string) ([]byte, error)
+Write(name string, data []byte) error
+Remove(name string)

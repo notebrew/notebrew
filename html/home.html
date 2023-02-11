@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
+<link rel="stylesheet" href="/static/styles.css">
+<title>Login</title>
+<header class="notebrew-header"><a href="/">notebrew</a></header>
+<div class="flex">
+    {{- if .LoggedIn }}
+    <p class="mr3"><a href="/user">Dashboard</a>
+    <p class="mr3"><a href="/note?new">new note</a>
+    <p class="mr3"><input type="submit" form="logout" value="Logout" class="pointer">
+    <form id="logout" method="POST" action="/logout" class="dn"></form>
+    {{- else }}
+    <p class="mr3"><a href="/login">Log In</a>
+    <p class="mr3"><a href="/register">Create An Account</a>
+    {{- end }}
+</div>

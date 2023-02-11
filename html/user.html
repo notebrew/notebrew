@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
+<link rel="stylesheet" href="/static/styles.css">
+<title>User</title>
+<header class="notebrew-header"><a href="/">notebrew</a></header>
+<div class="flex">
+    <p class="mr3"><a href="/note?new">new note</a>
+    <p class="mr3"><input type="submit" form="logout" value="Logout" class="pointer">
+    <form id="logout" method="POST" action="/logout" class="dn"></form>
+</div>
+<p>UserID: {{ .UserID }}
+<p>Name: {{ .Name }}

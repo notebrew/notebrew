@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/styles.css">
+<title>Login</title>
+<header class="notebrew-header"><a href="/">notebrew</a></header>
+<h1>Login</h1>
+<form method="POST">
+    <p>Email: <input type="email" name="email" value="{{ .Email }}" required>
+    <p>Password: <input type="password" name="password" required>
+    {{- with .RedirectTo }}
+    <p><input name="redirect_to" type="hidden" value="{{ . }}">
+    {{- end }}
+    <p><input type="submit">
+</form>
+{{ with .ErrMsg }}<p>{{ . }}{{ end }}
