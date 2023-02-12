@@ -1,0 +1,13 @@
+{
+  "name": "notebrew",
+  "version": "1.0.0",
+  "license": "MIT",
+  "dependencies": {
+    "prosemirror-example-setup": "^1.2.1",
+    "prosemirror-model": "^1.19.0",
+    "prosemirror-schema-basic": "^1.2.1",
+    "prosemirror-schema-list": "^1.2.2",
+    "prosemirror-state": "^1.4.2",
+    "prosemirror-view": "^1.30.1"
+  }
+}
