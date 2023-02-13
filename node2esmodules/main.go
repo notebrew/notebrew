@@ -28,6 +28,8 @@ type PackageInfo struct {
 	ImportPath string
 }
 
+// NOTE: this holds only as long as there is one version of each dependency in
+// node_modules. Nested depedencies are completely ignored.
 func main() {
 	flag.Parse()
 	nodeModules, err := os.Open("node_modules")
@@ -113,7 +115,6 @@ func main() {
 			log.Println(packageName, err)
 			continue
 		}
-		// TODO: convert the format from {packageName}@{version}.js to {scope}/{packageName}/{version}.js.
 		outputName := filepath.Join(*dirFlag, packageName+"@"+packageInfo.Version+".js")
 		if *gzipFlag {
 			outputName += ".gz"
