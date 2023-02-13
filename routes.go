@@ -20,6 +20,7 @@ func (server *Server) Handler() http.Handler {
 		http.Redirect(w, r, "/note/"+strings.TrimPrefix(r.URL.Path, "/n/"), http.StatusFound)
 	})
 	mux.HandleFunc("/static/", server.Static)
+	mux.HandleFunc("/es_modules/", server.Static)
 	mux.HandleFunc("/", server.Root)
 	return mux
 }

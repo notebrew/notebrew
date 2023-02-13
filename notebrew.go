@@ -130,20 +130,29 @@ func (server *Server) ErrorPage(w http.ResponseWriter, r *http.Request) {
 	_ = errTemplate.Execute(w, data)
 }
 
-// go:embed static
+// go:embed static es_modules
 var staticFS embed.FS
 
 var rootFS = os.DirFS(".")
 
 func (server *Server) Static(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/")
-	file, err := rootFS.Open(name)
+	file, err := rootFS.Open(strings.TrimSuffix(name, "/"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			server.Error(w, r, http.StatusNotFound, nil)
 			return
 		}
 		server.Error(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	fileinfo, err := file.Stat()
+	if err != nil {
+		server.Error(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	if fileinfo.IsDir() {
+		server.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
 	if strings.HasSuffix(name, ".gz") {
@@ -154,14 +163,9 @@ func (server *Server) Static(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Encoding", "gzip")
 		}
 	}
-	var modtime time.Time
-	fileinfo, err := file.Stat()
-	if err == nil {
-		modtime = fileinfo.ModTime()
-	}
 	fileseeker, ok := file.(io.ReadSeeker)
 	if ok {
-		http.ServeContent(w, r, name, modtime, fileseeker)
+		http.ServeContent(w, r, name, fileinfo.ModTime(), fileseeker)
 		return
 	}
 	var buf bytes.Buffer
@@ -171,7 +175,7 @@ func (server *Server) Static(w http.ResponseWriter, r *http.Request) {
 		server.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	http.ServeContent(w, r, name, modtime, bytes.NewReader(buf.Bytes()))
+	http.ServeContent(w, r, name, fileinfo.ModTime(), bytes.NewReader(buf.Bytes()))
 }
 
 func (server *Server) CurrentUserID(r *http.Request) (ulid.ULID, bool) {
