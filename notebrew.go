@@ -130,7 +130,7 @@ func (server *Server) ErrorPage(w http.ResponseWriter, r *http.Request) {
 	_ = errTemplate.Execute(w, data)
 }
 
-// go:embed static es_modules
+// go:embed static esmodules
 var staticFS embed.FS
 
 var rootFS = os.DirFS(".")
