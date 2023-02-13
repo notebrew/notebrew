@@ -113,6 +113,7 @@ func main() {
 			log.Println(packageName, err)
 			continue
 		}
+		// TODO: convert the format from {packageName}@{version}.js to {scope}/{packageName}/{version}.js.
 		outputName := filepath.Join(*dirFlag, packageName+"@"+packageInfo.Version+".js")
 		if *gzipFlag {
 			outputName += ".gz"
