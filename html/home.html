@@ -3,6 +3,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
 <link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/esmodules/prosemirror-view@1.30.1.css.gz">
 <title>Login</title>
 <header class="notebrew-header"><a href="/">notebrew</a></header>
 <div class="flex">
@@ -17,11 +18,12 @@
     {{- end }}
 </div>
 <script type="module">
-import {schema} from "/esmodules/prosemirror-schema-basic@1.2.1.js.gz"
-import {EditorState} from "/esmodules/prosemirror-state@1.4.2.js.gz"
-import {EditorView} from "/esmodules/prosemirror-view@1.30.1.js.gz"
-import {undo, redo, history} from "/esmodules/prosemirror-history@1.3.0.js.gz"
-import {keymap} from "/esmodules/prosemirror-keymap@1.2.0.js.gz"
+import {schema} from "/esmodules/prosemirror-schema-basic@1.2.1.js.gz";
+import {EditorState} from "/esmodules/prosemirror-state@1.4.2.js.gz";
+import {EditorView} from "/esmodules/prosemirror-view@1.30.1.js.gz";
+import {undo, redo, history} from "/esmodules/prosemirror-history@1.3.0.js.gz";
+import {keymap} from "/esmodules/prosemirror-keymap@1.2.0.js.gz";
+import {baseKeymap} from "/esmodules/prosemirror-commands@1.5.0.js.gz";
 
 let state = EditorState.create({
     schema: schema,
@@ -31,9 +33,10 @@ let state = EditorState.create({
             "Mod-z": undo,
             "Mod-y": redo,
         }),
+        keymap(baseKeymap),
     ],
-})
+});
 window.view = new EditorView(document.body, {
     state: state,
-})
+});
 </script>
