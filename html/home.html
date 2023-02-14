@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<html lang="en">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/tachyons/css/tachyons.min.css">
 <link rel="stylesheet" href="/static/styles.css">
@@ -15,10 +16,24 @@
     <p class="mr3"><a href="/register">Create An Account</a>
     {{- end }}
 </div>
-<form>
-    <textarea>hiya</textarea>
-</form>
 <script type="module">
-     import {EditorState} from "/static/prosemirror-state.js";
-     console.log(EditorState);
+import {schema} from "/esmodules/prosemirror-schema-basic@1.2.1.js.gz"
+import {EditorState} from "/esmodules/prosemirror-state@1.4.2.js.gz"
+import {EditorView} from "/esmodules/prosemirror-view@1.30.1.js.gz"
+import {undo, redo, history} from "/esmodules/prosemirror-history@1.3.0.js.gz"
+import {keymap} from "/esmodules/prosemirror-keymap@1.2.0.js.gz"
+
+let state = EditorState.create({
+    schema: schema,
+    plugins: [
+        history(),
+        keymap({
+            "Mod-z": undo,
+            "Mod-y": redo,
+        }),
+    ],
+})
+window.view = new EditorView(document.body, {
+    state: state,
+})
 </script>

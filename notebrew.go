@@ -112,6 +112,7 @@ func (server *Server) Error(w http.ResponseWriter, r *http.Request, code int, ms
 		"Code":   code,
 	}
 	if r.Method == "GET" {
+		w.WriteHeader(code)
 		_ = errTemplate.Execute(w, data)
 		return
 	}
