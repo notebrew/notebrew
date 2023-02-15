@@ -18,70 +18,21 @@
     <p class="mr3"><a href="/register">Create An Account</a>
     {{- end }}
 </div>
-<textarea id="editor"></textarea>
-<textarea id="content" style="display:none;"></textarea>
-<div>
-    <input type="radio" name="format" value="markdown">
-    <label>markdown</label>
-</div>
-<div>
-    <input type="radio" name="format" value="prosemirror">
-    <label>prosemirror</label>
-</div>
 <script type="module">
+import {schema} from "/esmodules/prosemirror-schema-basic@1.2.1.js.gz";
 import {EditorState} from "/esmodules/prosemirror-state@1.4.2.js.gz";
 import {EditorView} from "/esmodules/prosemirror-view@1.30.1.js.gz";
 import {undo, redo, history} from "/esmodules/prosemirror-history@1.3.0.js.gz";
 import {keymap} from "/esmodules/prosemirror-keymap@1.2.0.js.gz";
 import {baseKeymap} from "/esmodules/prosemirror-commands@1.5.0.js.gz";
-import {schema, defaultMarkdownParser, defaultMarkdownSerializer} from "/esmodules/prosemirror-markdown@1.10.1.js.gz";
 import {exampleSetup} from "/esmodules/prosemirror-example-setup@1.2.1.js.gz";
-import markdownit from '/esmodules/markdown-it@13.0.1.js.gz';
-
-class MarkdownView {
-  constructor(target, content) {
-    this.textarea = target.appendChild(document.createElement("textarea"))
-    this.textarea.value = content
-  }
-
-  get content() { return this.textarea.value }
-  focus() { this.textarea.focus() }
-  destroy() { this.textarea.remove() }
-}
-
-// markdownit("commonmark", { html: false })
-window.markdownit = markdownit;
-
-class ProseMirrorView {
-  constructor(target, content) {
-    this.view = new EditorView(target, {
-      state: EditorState.create({
-        doc: defaultMarkdownParser.parse(content),
-        plugins: exampleSetup({schema})
-      })
-    })
-  }
-
-  get content() {
-    return defaultMarkdownSerializer.serialize(this.view.state.doc)
-  }
-  focus() { this.view.focus() }
-  destroy() { this.view.destroy() }
-}
-
-let place = document.querySelector("#editor")
-let view = new MarkdownView(place, document.querySelector("#content").value)
-
-document.querySelectorAll("input[type=radio]").forEach(button => {
-  button.addEventListener("change", () => {
-    if (!button.checked) return
-    let View = button.value == "markdown" ? MarkdownView : ProseMirrorView
-    if (view instanceof View) return
-    let content = view.content
-    view.destroy()
-    view = new View(place, content)
-    view.focus()
-  })
-})
-
+let state = EditorState.create({
+  schema,
+  plugins: [
+    history(),
+    keymap({"Mod-z": undo, "Mod-y": redo}),
+    keymap(baseKeymap),
+  ]
+});
+let view = new EditorView(document.body, {state});
 </script>
