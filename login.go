@@ -2,16 +2,12 @@ package notebrew
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"html/template"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/bokwoon95/sq"
 	"github.com/oklog/ulid/v2"
@@ -107,15 +103,23 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set session token.
-	userIDString := strings.ToLower(result.UserID.String())
-	sessionToken := time.Now().UTC().Format("20060102") + "." + userIDString
-	mac := hmac.New(sha256.New, server.SigningKey[:])
-	mac.Write([]byte(sessionToken))
-	signature := mac.Sum(nil)
-	base64Signature := base64.URLEncoding.EncodeToString(signature)
+	sessionID := strings.ToLower(ulid.Make().String())
+	SESSION := sq.New[SESSION]("")
+	_, err = sq.Exec(server.DB, sq.
+		InsertInto(SESSION).
+		ColumnValues(func(col *sq.Column) {
+			col.SetString(SESSION.SESSION_ID, sessionID)
+			col.SetUUID(SESSION.USER_ID, result.UserID)
+		}).
+		SetDialect(server.Dialect),
+	)
+	if err != nil {
+		server.Error(w, r, http.StatusInternalServerError, err)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
-		Value:    base64Signature + "." + sessionToken,
+		Value:    sessionID,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
@@ -124,7 +128,7 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, redirectTo, http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/user/"+userIDString, http.StatusFound)
+	http.Redirect(w, r, "/user/"+strings.ToLower(result.UserID.String()), http.StatusFound)
 }
 
 func (server *Server) Logout(w http.ResponseWriter, r *http.Request) {
@@ -136,5 +140,18 @@ func (server *Server) Logout(w http.ResponseWriter, r *http.Request) {
 		Name:   "session",
 		MaxAge: -1,
 	})
+	cookie, err := r.Cookie("session")
+	if err == nil {
+		SESSION := sq.New[SESSION]("")
+		sessionID := cookie.Value
+		_, err := sq.Exec(server.DB, sq.
+			DeleteFrom(SESSION).
+			Where(SESSION.SESSION_ID.EqString(sessionID)).
+			SetDialect(server.Dialect),
+		)
+		if err != nil {
+			log.Println(err)
+		}
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }

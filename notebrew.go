@@ -2,8 +2,6 @@ package notebrew
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
 	"embed"
 	"encoding/base64"
@@ -13,6 +11,7 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -21,17 +20,16 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/bokwoon95/sq"
 	"github.com/oklog/ulid/v2"
 )
 
 type Server struct {
-	DB         *sql.DB
-	Dialect    string
-	SigningKey [32]byte
-	NoteFS     FS
-	ImageFS    FS
+	DB      *sql.DB
+	Dialect string
+	NoteFS  FS
+	ImageFS FS
 }
 
 func (server *Server) Redirect(w http.ResponseWriter, r *http.Request, destURL string, data any) {
@@ -43,18 +41,28 @@ func (server *Server) Redirect(w http.ResponseWriter, r *http.Request, destURL s
 	if err != nil {
 		panic(err)
 	}
-	payload, err := json.Marshal(data)
+	var b strings.Builder
+	err = json.NewEncoder(&b).Encode(data)
 	if err != nil {
 		panic(err)
 	}
-	base64Payload := base64.URLEncoding.EncodeToString(payload)
-	mac := hmac.New(sha256.New, server.SigningKey[:])
-	mac.Write([]byte(base64Payload))
-	signature := mac.Sum(nil)
-	base64Signature := base64.URLEncoding.EncodeToString(signature)
+	value := b.String()
+	sessionID := strings.ToLower(ulid.Make().String())
+	FLASH_SESSION := sq.New[FLASH_SESSION]("")
+	_, err = sq.Exec(server.DB, sq.
+		InsertInto(FLASH_SESSION).
+		ColumnValues(func(col *sq.Column) {
+			col.SetString(FLASH_SESSION.SESSION_ID, sessionID)
+			col.SetString(FLASH_SESSION.VALUE, value)
+		}).
+		SetDialect(server.Dialect),
+	)
+	if err != nil {
+		log.Println(err)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     base64.URLEncoding.EncodeToString([]byte(u.Path)),
-		Value:    base64Signature + "." + base64Payload,
+		Value:    sessionID,
 		MaxAge:   3,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
@@ -72,25 +80,26 @@ func (server *Server) Flash(w http.ResponseWriter, r *http.Request, dest any) er
 	if err != nil {
 		return nil
 	}
-	base64Signature, base64Payload, ok := strings.Cut(cookie.Value, ".")
-	if !ok {
-		return nil
-	}
-	gotSignature, err := base64.URLEncoding.DecodeString(base64Signature)
-	if err != nil {
-		return nil
-	}
-	mac := hmac.New(sha256.New, server.SigningKey[:])
-	mac.Write([]byte(base64Payload))
-	wantSignature := mac.Sum(nil)
-	if !hmac.Equal(gotSignature, wantSignature) {
-		return nil
-	}
-	payload, err := base64.URLEncoding.DecodeString(base64Payload)
-	if err != nil {
-		return nil
-	}
-	return json.Unmarshal(payload, dest)
+	FLASH_SESSION := sq.New[FLASH_SESSION]("")
+	sessionID := cookie.Value
+	defer func() {
+		_, err := sq.Exec(server.DB, sq.
+			DeleteFrom(FLASH_SESSION).
+			Where(FLASH_SESSION.SESSION_ID.EqString(sessionID)).
+			SetDialect(server.Dialect),
+		)
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+	value, err := sq.FetchOne(server.DB, sq.
+		From(FLASH_SESSION).
+		Where(FLASH_SESSION.SESSION_ID.EqString(sessionID)),
+		func(row *sq.Row) []byte {
+			return row.BytesField(FLASH_SESSION.VALUE)
+		},
+	)
+	return json.Unmarshal(value, dest)
 }
 
 var errTemplate = template.Must(template.New("error").Parse(`<!DOCTYPE html>
@@ -184,32 +193,17 @@ func (server *Server) CurrentUserID(r *http.Request) (ulid.ULID, bool) {
 	if err != nil {
 		return ulid.ULID{}, false
 	}
-	base64Signature, sessionToken, ok := strings.Cut(cookie.Value, ".")
-	if !ok {
-		return ulid.ULID{}, false
-	}
-	gotSignature, err := base64.URLEncoding.DecodeString(base64Signature)
-	if err != nil {
-		return ulid.ULID{}, false
-	}
-	mac := hmac.New(sha256.New, server.SigningKey[:])
-	mac.Write([]byte(sessionToken))
-	wantSignature := mac.Sum(nil)
-	if !hmac.Equal(gotSignature, wantSignature) {
-		return ulid.ULID{}, false
-	}
-	createdAtString, userIDString, ok := strings.Cut(sessionToken, ".")
-	if !ok {
-		return ulid.ULID{}, false
-	}
-	createdAt, err := time.Parse("20060102", createdAtString)
-	if err != nil {
-		return ulid.ULID{}, false
-	}
-	if time.Now().Sub(createdAt) > time.Hour*24*30 {
-		return ulid.ULID{}, false
-	}
-	userID, err := ulid.Parse(userIDString)
+	sessionID := cookie.Value
+	SESSION := sq.New[SESSION]("")
+	userID, err := sq.FetchOne(server.DB, sq.
+		From(SESSION).
+		Where(SESSION.SESSION_ID.EqString(sessionID)).
+		SetDialect(server.Dialect),
+		func(row *sq.Row) (userID ulid.ULID) {
+			row.UUIDField(&userID, SESSION.USER_ID)
+			return userID
+		},
+	)
 	if err != nil {
 		return ulid.ULID{}, false
 	}

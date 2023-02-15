@@ -38,3 +38,15 @@ type NOTE struct {
 	NOTE_ID sq.UUIDField `ddl:"primarykey"`
 	USER_ID sq.UUIDField `ddl:"references=users index"`
 }
+
+type FLASH_SESSION struct {
+	sq.TableStruct
+	SESSION_ID sq.StringField `ddl:"primarykey"`
+	VALUE      sq.JSONField
+}
+
+type SESSION struct {
+	sq.TableStruct
+	SESSION_ID sq.StringField `ddl:"primarykey"`
+	USER_ID    sq.UUIDField
+}
