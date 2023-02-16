@@ -19,11 +19,17 @@ func Automigrate(dialect string, db *sql.DB) error {
 		Dialect:        dialect,
 		DirFS:          migrationFS,
 		Filenames:      []string{"tables.go"},
-		Stderr:         io.Discard,
 		DropObjects:    true,
 		AcceptWarnings: true,
+		DryRun:         true,
 	}
 	err := automigrateCmd.Run()
+	if err != nil {
+		return err
+	}
+	automigrateCmd.DryRun = false
+	automigrateCmd.Stderr = io.Discard
+	err = automigrateCmd.Run()
 	if err != nil {
 		return err
 	}
@@ -72,6 +78,7 @@ type NOTE struct {
 	NOTE_NUMBER    sq.NumberField
 	BODY           sq.StringField `ddl:"len=65536"`
 	FTS            sq.AnyField    `ddl:"dialect=postgres type=TSVECTOR index={. using=gin}"`
+	// TODO: figure out why the FTS field is not being ignored by SQLite.
 }
 
 type NOTE_FTS struct {
