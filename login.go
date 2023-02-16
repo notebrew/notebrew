@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
+func (app *App) Login(w http.ResponseWriter, r *http.Request) {
 	type TemplateData struct {
 		Email      string
 		ErrMsg     string
@@ -22,11 +22,11 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "GET" && r.Method != "POST" {
-		server.Error(w, r, http.StatusMethodNotAllowed, nil)
+		app.Error(w, r, http.StatusMethodNotAllowed, nil)
 		return
 	}
 
-	currentUserID, loggedIn := server.CurrentUserID(r)
+	currentUserID, loggedIn := app.CurrentUserID(r)
 	if loggedIn {
 		http.Redirect(w, r, "/user/"+strings.ToLower(currentUserID.String()), http.StatusFound)
 		return
@@ -35,19 +35,19 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 	// Render login page.
 	if r.Method == "GET" {
 		var templateData TemplateData
-		err := server.Flash(w, r, &templateData)
+		err := app.Flash(w, r, &templateData)
 		if err != nil {
 			log.Println(err)
 		}
 		tmpl, err := template.ParseFiles("html/login.html")
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		var buf bytes.Buffer
 		err = tmpl.Execute(&buf, templateData)
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		_, err = buf.WriteTo(w)
@@ -71,10 +71,10 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Get user info.
 	USERS := sq.New[USERS]("")
-	result, err := sq.FetchOneContext(r.Context(), server.DB, sq.
+	result, err := sq.FetchOneContext(r.Context(), app.DB, sq.
 		From(USERS).
 		Where(USERS.EMAIL.EqString(templateData.Email)).
-		SetDialect(server.Dialect),
+		SetDialect(app.Dialect),
 		func(row *sq.Row) (result struct {
 			UserID       ulid.ULID
 			PasswordHash string
@@ -86,11 +86,11 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		templateData.ErrMsg = "incorrect email or password"
-		server.Redirect(w, r, r.URL.Path, templateData)
+		app.Redirect(w, r, r.URL.Path, templateData)
 		return
 	}
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -98,28 +98,28 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 	err = bcrypt.CompareHashAndPassword([]byte(result.PasswordHash), []byte(password))
 	if err != nil {
 		templateData.ErrMsg = "incorrect email or password"
-		server.Redirect(w, r, r.URL.Path, templateData)
+		app.Redirect(w, r, r.URL.Path, templateData)
 		return
 	}
 
 	// Set session token.
-	sessionID := strings.ToLower(ulid.Make().String())
-	SESSION := sq.New[SESSION]("")
-	_, err = sq.Exec(server.DB, sq.
-		InsertInto(SESSION).
+	sessionID := ulid.Make()
+	LOGIN_SESSION := sq.New[LOGIN_SESSION]("")
+	_, err = sq.Exec(app.DB, sq.
+		InsertInto(LOGIN_SESSION).
 		ColumnValues(func(col *sq.Column) {
-			col.SetString(SESSION.SESSION_ID, sessionID)
-			col.SetUUID(SESSION.USER_ID, result.UserID)
+			col.SetUUID(LOGIN_SESSION.SESSION_ID, sessionID)
+			col.SetUUID(LOGIN_SESSION.USER_ID, result.UserID)
 		}).
-		SetDialect(server.Dialect),
+		SetDialect(app.Dialect),
 	)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
-		Value:    sessionID,
+		Value:    strings.ToLower(sessionID.String()),
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	})
@@ -131,9 +131,9 @@ func (server *Server) Login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/user/"+strings.ToLower(result.UserID.String()), http.StatusFound)
 }
 
-func (server *Server) Logout(w http.ResponseWriter, r *http.Request) {
+func (app *App) Logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
-		server.Error(w, r, http.StatusMethodNotAllowed, nil)
+		app.Error(w, r, http.StatusMethodNotAllowed, nil)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -142,15 +142,17 @@ func (server *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	})
 	cookie, err := r.Cookie("session")
 	if err == nil {
-		SESSION := sq.New[SESSION]("")
-		sessionID := cookie.Value
-		_, err := sq.Exec(server.DB, sq.
-			DeleteFrom(SESSION).
-			Where(SESSION.SESSION_ID.EqString(sessionID)).
-			SetDialect(server.Dialect),
-		)
-		if err != nil {
-			log.Println(err)
+		sessionID, err := ulid.Parse(cookie.Value)
+		if err == nil {
+			LOGIN_SESSION := sq.New[LOGIN_SESSION]("")
+			_, err := sq.Exec(app.DB, sq.
+				DeleteFrom(LOGIN_SESSION).
+				Where(LOGIN_SESSION.SESSION_ID.EqUUID(sessionID)).
+				SetDialect(app.Dialect),
+			)
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 	http.Redirect(w, r, "/", http.StatusFound)

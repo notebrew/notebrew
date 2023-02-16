@@ -14,7 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-func (server *Server) User(w http.ResponseWriter, r *http.Request) {
+func (app *App) User(w http.ResponseWriter, r *http.Request) {
 	type TemplateData struct {
 		UserID        string
 		CurrentUserID string
@@ -22,17 +22,17 @@ func (server *Server) User(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "GET" {
-		server.Error(w, r, http.StatusMethodNotAllowed, nil)
+		app.Error(w, r, http.StatusMethodNotAllowed, nil)
 		return
 	}
 
 	segments := strings.Split(strings.TrimPrefix(path.Clean(r.URL.Path), "/"), "/")
 	if segments[0] != "user" || len(segments) > 2 {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
 
-	currentUserID, loggedIn := server.CurrentUserID(r)
+	currentUserID, loggedIn := app.CurrentUserID(r)
 	if len(segments) < 2 {
 		if loggedIn {
 			http.Redirect(w, r, "/user/"+strings.ToLower(currentUserID.String()), http.StatusFound)
@@ -44,7 +44,7 @@ func (server *Server) User(w http.ResponseWriter, r *http.Request) {
 
 	base32UserID := segments[1]
 	if len(base32UserID) != ulid.EncodedSize {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
 
@@ -68,15 +68,15 @@ func (server *Server) User(w http.ResponseWriter, r *http.Request) {
 			Name:   "session",
 			MaxAge: -1,
 		})
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 	}
 
 	// Fetch user by userID.
 	USERS := sq.New[USERS]("")
-	name, err := sq.FetchOneContext(r.Context(), server.DB, sq.
+	name, err := sq.FetchOneContext(r.Context(), app.DB, sq.
 		From(USERS).
 		Where(USERS.USER_ID.EqUUID(userID)).
-		SetDialect(server.Dialect),
+		SetDialect(app.Dialect),
 		func(row *sq.Row) string {
 			return row.StringField(USERS.NAME)
 		},
@@ -87,10 +87,10 @@ func (server *Server) User(w http.ResponseWriter, r *http.Request) {
 				Name:   "session",
 				MaxAge: -1,
 			})
-			server.Error(w, r, http.StatusNotFound, nil)
+			app.Error(w, r, http.StatusNotFound, nil)
 			return
 		}
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -102,13 +102,13 @@ func (server *Server) User(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl, err := template.ParseFiles("html/user.html")
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	var buf bytes.Buffer
 	err = tmpl.Execute(&buf, templateData)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	_, err = buf.WriteTo(w)

@@ -11,36 +11,36 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-func (server *Server) Root(w http.ResponseWriter, r *http.Request) {
+func (app *App) Root(w http.ResponseWriter, r *http.Request) {
 	type TemplateData struct {
 		UserID     string
 		LoggedIn bool
 	}
 
 	if r.Method != "GET" {
-		server.Error(w, r, http.StatusMethodNotAllowed, nil)
+		app.Error(w, r, http.StatusMethodNotAllowed, nil)
 		return
 	}
 
 	segments := strings.Split(strings.TrimPrefix(path.Clean(r.URL.Path), "/"), "/")
 	if len(segments) > 1 {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
 
 	// Render home page.
 	if segments[0] == "" {
 		var templateData TemplateData
-		_, templateData.LoggedIn = server.CurrentUserID(r)
+		_, templateData.LoggedIn = app.CurrentUserID(r)
 		tmpl, err := template.ParseFiles("html/home.html")
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		var buf bytes.Buffer
 		err = tmpl.Execute(&buf, templateData)
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		_, err = buf.WriteTo(w)
@@ -76,6 +76,6 @@ func (server *Server) Root(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	server.Error(w, r, http.StatusNotFound, nil)
+	app.Error(w, r, http.StatusNotFound, nil)
 	return
 }

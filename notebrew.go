@@ -17,22 +17,88 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bokwoon95/sq"
+	"github.com/bokwoon95/sqddl/ddl"
+	"github.com/bokwoon95/sqddl/drivers/ddlmysql"
+	"github.com/bokwoon95/sqddl/drivers/ddlpostgres"
+	"github.com/bokwoon95/sqddl/drivers/ddlsqlite3"
 	"github.com/oklog/ulid/v2"
 )
 
-type Server struct {
+func init() {
+	ddlsqlite3.Register()
+	ddlpostgres.Register()
+	ddlmysql.Register()
+}
+
+type App struct {
 	DB      *sql.DB
 	Dialect string
-	NoteFS  FS
 	ImageFS FS
 }
 
-func (server *Server) Redirect(w http.ResponseWriter, r *http.Request, destURL string, data any) {
+func NewApp(databaseURL string, dataDir string) (*App, error) {
+	if dataDir == "" {
+		userHomeDir, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+		dataDir = filepath.Join(userHomeDir, "notebrewdata")
+	}
+	if databaseURL == "" {
+		err := os.MkdirAll(dataDir, 0755)
+		if err != nil {
+			return nil, err
+		}
+		// See https://github.com/mattn/go-sqlite3#connection-string for
+		// available options.
+		options := url.Values{
+			"_foreign_keys": []string{"1"},
+			"_journal_mode": []string{"WAL"},
+			"_txlock":       []string{"immediate"},
+			"_busy_timeout": []string{strconv.FormatInt((10 * time.Second).Milliseconds(), 10)},
+		}
+		databaseURL = filepath.Join(dataDir, "notebrew.db?"+options.Encode())
+	}
+	dialect, driverName, dataSourceName := ddl.NormalizeDSN(databaseURL)
+	if dialect == ddl.DialectSQLite {
+		err := os.MkdirAll(filepath.Dir(dataSourceName), 0755)
+		if err != nil {
+			return nil, err
+		}
+	}
+	db, err := sql.Open(driverName, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+	err = Automigrate(dialect, db)
+	if err != nil {
+		return nil, err
+	}
+	imageDir := filepath.Join(dataDir, "image")
+	err = os.MkdirAll(imageDir, 0755)
+	if err != nil {
+		return nil, err
+	}
+	app := &App{
+		DB:      db,
+		Dialect: dialect,
+		ImageFS: NestedDirFS(imageDir),
+	}
+	return app, nil
+}
+
+func (app *App) Cleanup() error {
+	return app.DB.Close()
+}
+
+func (app *App) Redirect(w http.ResponseWriter, r *http.Request, destURL string, data any) {
 	if data == nil {
 		http.Redirect(w, r, destURL, http.StatusFound)
 		return
@@ -47,22 +113,22 @@ func (server *Server) Redirect(w http.ResponseWriter, r *http.Request, destURL s
 		panic(err)
 	}
 	value := b.String()
-	sessionID := strings.ToLower(ulid.Make().String())
+	sessionID := ulid.Make()
 	FLASH_SESSION := sq.New[FLASH_SESSION]("")
-	_, err = sq.Exec(server.DB, sq.
+	_, err = sq.Exec(app.DB, sq.
 		InsertInto(FLASH_SESSION).
 		ColumnValues(func(col *sq.Column) {
-			col.SetString(FLASH_SESSION.SESSION_ID, sessionID)
+			col.SetUUID(FLASH_SESSION.SESSION_ID, sessionID)
 			col.SetString(FLASH_SESSION.VALUE, value)
 		}).
-		SetDialect(server.Dialect),
+		SetDialect(app.Dialect),
 	)
 	if err != nil {
 		log.Println(err)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     base64.URLEncoding.EncodeToString([]byte(u.Path)),
-		Value:    sessionID,
+		Value:    strings.ToLower(sessionID.String()),
 		MaxAge:   3,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
@@ -70,7 +136,7 @@ func (server *Server) Redirect(w http.ResponseWriter, r *http.Request, destURL s
 	http.Redirect(w, r, destURL, http.StatusFound)
 }
 
-func (server *Server) Flash(w http.ResponseWriter, r *http.Request, dest any) error {
+func (app *App) Flash(w http.ResponseWriter, r *http.Request, dest any) error {
 	name := base64.URLEncoding.EncodeToString([]byte(r.URL.Path))
 	http.SetCookie(w, &http.Cookie{
 		Name:   name,
@@ -81,20 +147,23 @@ func (server *Server) Flash(w http.ResponseWriter, r *http.Request, dest any) er
 		return nil
 	}
 	FLASH_SESSION := sq.New[FLASH_SESSION]("")
-	sessionID := cookie.Value
+	sessionID, err := ulid.Parse(cookie.Value)
+	if err != nil {
+		return nil
+	}
 	defer func() {
-		_, err := sq.Exec(server.DB, sq.
+		_, err := sq.Exec(app.DB, sq.
 			DeleteFrom(FLASH_SESSION).
-			Where(FLASH_SESSION.SESSION_ID.EqString(sessionID)).
-			SetDialect(server.Dialect),
+			Where(FLASH_SESSION.SESSION_ID.EqUUID(sessionID)).
+			SetDialect(app.Dialect),
 		)
 		if err != nil {
 			log.Println(err)
 		}
 	}()
-	value, err := sq.FetchOne(server.DB, sq.
+	value, err := sq.FetchOne(app.DB, sq.
 		From(FLASH_SESSION).
-		Where(FLASH_SESSION.SESSION_ID.EqString(sessionID)),
+		Where(FLASH_SESSION.SESSION_ID.EqUUID(sessionID)),
 		func(row *sq.Row) []byte {
 			return row.BytesField(FLASH_SESSION.VALUE)
 		},
@@ -112,7 +181,7 @@ var errTemplate = template.Must(template.New("error").Parse(`<!DOCTYPE html>
 {{ with .Msg }}<pre>{{ . }}</pre>{{ end }}
 `))
 
-func (server *Server) Error(w http.ResponseWriter, r *http.Request, code int, msg any) {
+func (app *App) Error(w http.ResponseWriter, r *http.Request, code int, msg any) {
 	_, file, line, _ := runtime.Caller(1)
 	data := map[string]any{
 		"Title":  strconv.Itoa(code) + " " + http.StatusText(code),
@@ -125,12 +194,12 @@ func (server *Server) Error(w http.ResponseWriter, r *http.Request, code int, ms
 		_ = errTemplate.Execute(w, data)
 		return
 	}
-	server.Redirect(w, r, "/error", data)
+	app.Redirect(w, r, "/error", data)
 }
 
-func (server *Server) ErrorPage(w http.ResponseWriter, r *http.Request) {
+func (app *App) ErrorPage(w http.ResponseWriter, r *http.Request) {
 	data := make(map[string]any)
-	server.Flash(w, r, &data)
+	app.Flash(w, r, &data)
 	code, ok := data["Code"].(int)
 	if !ok {
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -145,24 +214,24 @@ var staticFS embed.FS
 
 var rootFS = os.DirFS(".")
 
-func (server *Server) Static(w http.ResponseWriter, r *http.Request) {
+func (app *App) Static(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/")
 	file, err := rootFS.Open(strings.TrimSuffix(name, "/"))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			server.Error(w, r, http.StatusNotFound, nil)
+			app.Error(w, r, http.StatusNotFound, nil)
 			return
 		}
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	fileinfo, err := file.Stat()
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if fileinfo.IsDir() {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
 	if strings.HasSuffix(name, ".gz") {
@@ -182,29 +251,35 @@ func (server *Server) Static(w http.ResponseWriter, r *http.Request) {
 	buf.Grow(int(fileinfo.Size()))
 	_, err = buf.ReadFrom(file)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	http.ServeContent(w, r, name, fileinfo.ModTime(), bytes.NewReader(buf.Bytes()))
 }
 
-func (server *Server) CurrentUserID(r *http.Request) (ulid.ULID, bool) {
+func (app *App) CurrentUserID(r *http.Request) (ulid.ULID, bool) {
 	cookie, err := r.Cookie("session")
 	if err != nil {
 		return ulid.ULID{}, false
 	}
-	sessionID := cookie.Value
-	SESSION := sq.New[SESSION]("")
-	userID, err := sq.FetchOne(server.DB, sq.
-		From(SESSION).
-		Where(SESSION.SESSION_ID.EqString(sessionID)).
-		SetDialect(server.Dialect),
+	sessionID, err := ulid.Parse(cookie.Value)
+	if err != nil {
+		return ulid.ULID{}, false
+	}
+	LOGIN_SESSION := sq.New[LOGIN_SESSION]("")
+	userID, err := sq.FetchOne(app.DB, sq.
+		From(LOGIN_SESSION).
+		Where(LOGIN_SESSION.SESSION_ID.EqUUID(sessionID)).
+		SetDialect(app.Dialect),
 		func(row *sq.Row) (userID ulid.ULID) {
-			row.UUIDField(&userID, SESSION.USER_ID)
+			row.UUIDField(&userID, LOGIN_SESSION.USER_ID)
 			return userID
 		},
 	)
 	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Println(err)
+		}
 		return ulid.ULID{}, false
 	}
 	return userID, true

@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (server *Server) Register(w http.ResponseWriter, r *http.Request) {
+func (app *App) Register(w http.ResponseWriter, r *http.Request) {
 	const HCaptchaSiteKey = "10000000-ffff-ffff-ffff-000000000001"
 	type TemplateData struct {
 		Email           string
@@ -40,34 +40,34 @@ func (server *Server) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "GET" && r.Method != "POST" {
-		server.Error(w, r, http.StatusMethodNotAllowed, nil)
+		app.Error(w, r, http.StatusMethodNotAllowed, nil)
 		return
 	}
 
 	// If already logged in, redirect user.
-	currentUserID, loggedIn := server.CurrentUserID(r)
+	currentUserID, loggedIn := app.CurrentUserID(r)
 	if loggedIn {
-		server.Redirect(w, r, "/user/"+strings.ToLower(currentUserID.String()), nil)
+		app.Redirect(w, r, "/user/"+strings.ToLower(currentUserID.String()), nil)
 		return
 	}
 
 	// If GET, render registration page.
 	if r.Method == "GET" {
 		var templateData TemplateData
-		err := server.Flash(w, r, &templateData)
+		err := app.Flash(w, r, &templateData)
 		if err != nil {
 			log.Println(err)
 		}
 		templateData.HCaptchaSiteKey = HCaptchaSiteKey
 		tmpl, err := template.ParseFiles("html/register.html")
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		var buf bytes.Buffer
 		err = tmpl.Execute(&buf, templateData)
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		_, err = buf.WriteTo(w)
@@ -95,58 +95,58 @@ func (server *Server) Register(w http.ResponseWriter, r *http.Request) {
 		"sitekey":  []string{HCaptchaSiteKey},
 	})
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	defer resp.Body.Close()
 	var verificationResult HCaptchaVerificationResult
 	err = json.NewDecoder(resp.Body).Decode(&verificationResult)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !verificationResult.Success {
 		templateData.ErrMsg = "failed captcha"
-		server.Redirect(w, r, r.URL.Path, templateData)
+		app.Redirect(w, r, r.URL.Path, templateData)
 		return
 	}
 
 	// Create user.
 	b, err := bcrypt.GenerateFromPassword([]byte(password), 11)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	passwordHash := string(b)
 	USERS := sq.New[USERS]("")
-	result, err := sq.ExecContext(r.Context(), server.DB, sq.
+	result, err := sq.ExecContext(r.Context(), app.DB, sq.
 		Update(USERS).
 		Set(USERS.PASSWORD_HASH.SetString(passwordHash)).
 		Where(USERS.EMAIL.EqString(templateData.Email)).
-		SetDialect(server.Dialect),
+		SetDialect(app.Dialect),
 	)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if result.RowsAffected == 0 {
 		userID := [16]byte(ulid.Make())
-		_, err := sq.ExecContext(r.Context(), server.DB, sq.
+		_, err := sq.ExecContext(r.Context(), app.DB, sq.
 			InsertInto(USERS).
 			ColumnValues(func(col *sq.Column) {
 				col.SetUUID(USERS.USER_ID, userID)
 				col.SetString(USERS.EMAIL, templateData.Email)
 				col.SetString(USERS.PASSWORD_HASH, passwordHash)
 			}).
-			SetDialect(server.Dialect),
+			SetDialect(app.Dialect),
 		)
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 	}
 
-	server.Redirect(w, r, "/login", map[string]string{
+	app.Redirect(w, r, "/login", map[string]string{
 		"Email": templateData.Email,
 	})
 }

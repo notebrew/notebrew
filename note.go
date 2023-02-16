@@ -11,23 +11,25 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/bokwoon95/sq"
 )
 
-func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
+func (app *App) Note(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" && r.Method != "POST" {
-		server.Error(w, r, http.StatusMethodNotAllowed, nil)
+		app.Error(w, r, http.StatusMethodNotAllowed, nil)
 		return
 	}
 
 	segments := strings.Split(strings.TrimPrefix(path.Clean(r.URL.Path), "/"), "/")
 	if segments[0] != "note" || len(segments) > 2 {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
 
-	currentUserID, loggedIn := server.CurrentUserID(r)
+	currentUserID, loggedIn := app.CurrentUserID(r)
 	if !loggedIn {
-		server.Redirect(w, r, "/login", map[string]string{
+		app.Redirect(w, r, "/login", map[string]string{
 			"RedirectTo": r.URL.Path,
 		})
 		return
@@ -39,33 +41,42 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 		if len(segments) == 2 {
-			noteNumber := segments[1]
-			_, err := strconv.Atoi(noteNumber)
+			noteNumber, err := strconv.Atoi(segments[1])
 			if err != nil {
-				server.Error(w, r, http.StatusNotFound, nil)
+				app.Error(w, r, http.StatusNotFound, nil)
 				return
 			}
-			noteID := strings.ToLower(currentUserID.String()) + "-" + noteNumber
-			file, err := server.NoteFS.Open(noteID)
+			NOTE := sq.New[NOTE]("")
+			body, err := sq.FetchOne(app.DB, sq.
+				From(NOTE).
+				Where(
+					NOTE.USER_ID.EqUUID(currentUserID),
+					NOTE.NOTE_NUMBER.EqInt(noteNumber),
+				).
+				SetDialect(app.Dialect),
+				func(row *sq.Row) string {
+					return row.StringField(NOTE.BODY)
+				},
+			)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
-					server.Error(w, r, http.StatusNotFound, nil)
+					app.Error(w, r, http.StatusNotFound, nil)
 					return
 				}
-				server.Error(w, r, http.StatusInternalServerError, err)
+				app.Error(w, r, http.StatusInternalServerError, err)
 				return
 			}
 			if r.Form.Has("edit") {
 				// err := server.Render(w, "html/edit_note.html", nil)
 				tmpl, err := template.ParseFiles("html/edit_note.html")
 				if err != nil {
-					server.Error(w, r, http.StatusInternalServerError, err)
+					app.Error(w, r, http.StatusInternalServerError, err)
 					return
 				}
 				var buf bytes.Buffer
 				err = tmpl.Execute(&buf, nil)
 				if err != nil {
-					server.Error(w, r, http.StatusInternalServerError, err)
+					app.Error(w, r, http.StatusInternalServerError, err)
 					return
 				}
 				_, err = buf.WriteTo(w)
@@ -74,7 +85,7 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
-			_, err = io.Copy(w, file)
+			_, err = io.WriteString(w, body)
 			if err != nil {
 				log.Println(err)
 			}
@@ -86,13 +97,13 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 		}
 		tmpl, err := template.ParseFiles(filename)
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		var buf bytes.Buffer
 		err = tmpl.Execute(&buf, nil)
 		if err != nil {
-			server.Error(w, r, http.StatusInternalServerError, err)
+			app.Error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		_, err = buf.WriteTo(w)
@@ -103,31 +114,47 @@ func (server *Server) Note(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(segments) < 2 {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
-	noteNumber := segments[1]
-	_, err := strconv.Atoi(noteNumber)
+	noteNumber, err := strconv.Atoi(segments[1])
 	if err != nil {
-		server.Error(w, r, http.StatusNotFound, nil)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
-	noteID := strings.ToLower(currentUserID.String()) + "-" + noteNumber
-	writer, err := server.NoteFS.OpenWriter(noteID)
+	var b strings.Builder
+	_, err = io.Copy(&b, r.Body)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusNotFound, nil)
 		return
 	}
-	defer writer.Close()
-	_, err = io.Copy(writer, r.Body)
+	body := b.String()
+	NOTE := sq.New[NOTE]("")
+	insertQuery := sq.InsertQuery{
+		Dialect:     app.Dialect,
+		InsertTable: NOTE,
+		ColumnMapper: func(col *sq.Column) {
+			col.SetUUID(NOTE.USER_ID, currentUserID)
+			col.SetInt(NOTE.NOTE_NUMBER, noteNumber)
+			col.SetString(NOTE.BODY, body)
+		},
+	}
+	switch app.Dialect {
+	case sq.DialectSQLite, sq.DialectPostgres:
+		insertQuery.Conflict.Fields = sq.Fields{NOTE.USER_ID, NOTE.NOTE_NUMBER}
+		insertQuery.Conflict.Resolution = sq.Assignments{
+			NOTE.BODY.Set(NOTE.BODY.WithPrefix("EXCLUDED")),
+		}
+	case sq.DialectMySQL:
+		insertQuery.RowAlias = "new"
+		insertQuery.Conflict.Resolution = sq.Assignments{
+			NOTE.BODY.Set(NOTE.BODY.WithPrefix("new")),
+		}
+	}
+	_, err = sq.Exec(app.DB, insertQuery)
 	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
+		app.Error(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	err = writer.Close()
-	if err != nil {
-		server.Error(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	http.Redirect(w, r, "/note/"+noteNumber, http.StatusFound)
+	http.Redirect(w, r, "/note/"+strconv.Itoa(noteNumber), http.StatusFound)
 }

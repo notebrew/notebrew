@@ -1,53 +1,38 @@
 package main
 
 import (
-	"database/sql"
-	"flag"
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"os/signal"
+	"syscall"
+	"time"
 
-	"github.com/bokwoon95/sqddl/ddl"
-	"github.com/bokwoon95/sqddl/drivers/ddlpostgres"
-	"github.com/bokwoon95/sqddl/drivers/ddlsqlite3"
 	"github.com/notebrew/notebrew"
 )
 
-var (
-	dsn = flag.String("db", "notebrew-data/notebrew.db", "Data Source Name")
-)
-
-func init() {
-	flag.Parse()
-	ddlpostgres.Register()
-	ddlsqlite3.Register()
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-}
-
 func main() {
-	dialect, driverName, normalizedDSN := ddl.NormalizeDSN(*dsn)
-	if dialect == "sqlite" {
-		err := os.MkdirAll(filepath.Dir(normalizedDSN), 0755)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	db, err := sql.Open(driverName, normalizedDSN)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	app, err := notebrew.NewApp(os.Getenv("DATABASE_URL"), os.Getenv("NOTEBREW_DATA"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = notebrew.Automigrate(dialect, db)
-	if err != nil {
-		log.Fatal(err)
+	server := http.Server{
+		Addr:    os.Getenv("NOTEBREW_ADDR"),
+		Handler: app.Handler(),
 	}
-	server := &notebrew.Server{
-		DB:      db,
-		Dialect: dialect,
-		NoteFS:  notebrew.NestedDirFS("notebrew-data/note"),
-		ImageFS: notebrew.NestedDirFS("notebrew-data/image"),
+	if server.Addr == "" {
+		server.Addr = "localhost:7070"
 	}
-	fmt.Println("Listening on localhost:7070")
-	http.ListenAndServe("localhost:7070", server.Handler())
+	fmt.Println("Listening on " + server.Addr)
+	go server.ListenAndServe()
+	<-stop
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_ = server.Shutdown(ctx)
+	_ = app.Cleanup()
 }
