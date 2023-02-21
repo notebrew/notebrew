@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/bokwoon95/sq v0.2.2
-	github.com/bokwoon95/sqddl v0.3.5
+	github.com/bokwoon95/sqddl v0.3.7
 	github.com/oklog/ulid/v2 v2.1.0
 	golang.org/x/crypto v0.6.0
 )

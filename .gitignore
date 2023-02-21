@@ -1,4 +1,3 @@
 *.db
 .idea
 node_modules/
-notebrew-data/
