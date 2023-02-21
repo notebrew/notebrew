@@ -1,7 +1,7 @@
-github.com/bokwoon95/sq v0.2.2 h1:SlUuMNhD4OsM4jgG7YH3IKWH9bMQ9Tcr2b8QZiiiPWQ=
-github.com/bokwoon95/sq v0.2.2/go.mod h1:7UwnMRNTM1SgDHcZNaseXbznALQ1BF3XKldEf/XUVyk=
-github.com/bokwoon95/sqddl v0.3.7 h1:sH+cYNwJ+SLjJJHexIVVAztuORGVlui3ANpXtfy5zjg=
-github.com/bokwoon95/sqddl v0.3.7/go.mod h1:RC0e2+vAYXLJGOSgfBiuEJiHHBiT7rqB8DmTj00yykk=
+github.com/bokwoon95/sq v0.2.6 h1:0LA+Zmzn761z9dbjdqHdg0aGWjtXx05HF79RsquiPYw=
+github.com/bokwoon95/sq v0.2.6/go.mod h1:7UwnMRNTM1SgDHcZNaseXbznALQ1BF3XKldEf/XUVyk=
+github.com/bokwoon95/sqddl v0.3.10 h1:f06LQ4rKwq5vSjF0ReSe/ekwmYNVW4MQiRgJ0ADpI14=
+github.com/bokwoon95/sqddl v0.3.10/go.mod h1:OgvFqEXoqtz1xH1Z3yQiBphDu3l5aXzcD/s4hvAxPnU=
 github.com/denisenkom/go-mssqldb v0.12.3 h1:pBSGx9Tq67pBOTLmxNuirNTeB8Vjmf886Kx+8Y+8shw=
 github.com/go-sql-driver/mysql v1.7.0 h1:ueSltNNllEqE3qcWBTD0iQd3IpL/6U+mJxLkazJ7YPc=
 github.com/go-sql-driver/mysql v1.7.0/go.mod h1:OXbVy3sEdcQ2Doequ6Z5BW6fXNQTmx+9S1MCJN5yJMI=
