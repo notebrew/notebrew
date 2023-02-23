@@ -39,6 +39,8 @@ let view = new EditorView(document.body, {state});
 // https://www.techiedelight.com/paste-image-from-clipboard-using-javascript/
 // https://stackoverflow.com/questions/4459379/preview-an-image-before-it-is-uploaded
 // Why is pasteEvent.clipboardData always empty? Debug that.
+// https://web.archive.org/web/20160323212029/http://joelb.me/blog/2011/code-snippet-accessing-clipboard-images-with-javascript/
+// Investigate whether it is because it has to be pasted into an empty contenteditable div.
 let proseMirror = document.querySelector(".ProseMirror");
 if (proseMirror) {
   proseMirror.onpaste = function(pasteEvent) {
