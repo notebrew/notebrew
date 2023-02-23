@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	dirFlag  = flag.String("dir", "esmodules", "")
-	gzipFlag = flag.Bool("gzip", false, "")
+	dirFlag  = flag.String("dir", "esmodules", "the directory to copy the output files to.")
+	gzipFlag = flag.Bool("gzip", false, "gzips output files so they can be served directly with Content-Encoding: gzip.")
 )
 
 type PackageInfo struct {
@@ -28,8 +28,7 @@ type PackageInfo struct {
 	ImportPath string
 }
 
-// NOTE: this holds only as long as there is one version of each dependency in
-// node_modules. Nested depedencies are completely ignored.
+// NOTE: Nested dependencies are completely ignored.
 func main() {
 	flag.Parse()
 	nodeModules, err := os.Open("node_modules")
@@ -140,17 +139,30 @@ func main() {
 				log.Println(err)
 				break
 			}
-			if strings.HasPrefix(strings.TrimSpace(line), "import") {
+			if !strings.HasPrefix(strings.TrimSpace(line), "import") {
+				_, err = io.WriteString(output, line)
+				if err != nil {
+					log.Println(packageName, err)
+				}
+			} else {
 				sep := "\""
 				if strings.Index(line, sep) < 0 {
 					sep = "'"
 				}
 				before, after, ok := strings.Cut(line, sep)
 				if !ok {
+					_, err = io.WriteString(output, line)
+					if err != nil {
+						log.Println(packageName, err)
+					}
 					continue
 				}
 				name, after, ok := strings.Cut(after, sep)
 				if !ok {
+					_, err = io.WriteString(output, line)
+					if err != nil {
+						log.Println(packageName, err)
+					}
 					continue
 				}
 				pkg, ok := packageInfos[name]
@@ -158,7 +170,6 @@ func main() {
 					_, err = io.WriteString(output, line)
 					if err != nil {
 						log.Println(packageName, err)
-						break
 					}
 					continue
 				}
@@ -169,13 +180,6 @@ func main() {
 				_, err = io.WriteString(output, before+sep+"/"+newName+sep+after)
 				if err != nil {
 					log.Println(packageName, err)
-					break
-				}
-			} else {
-				_, err = io.WriteString(output, line)
-				if err != nil {
-					log.Println(packageName, err)
-					break
 				}
 			}
 			if isDone {

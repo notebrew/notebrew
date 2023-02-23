@@ -78,7 +78,6 @@ type NOTE struct {
 	NOTE_NUMBER    sq.NumberField
 	BODY           sq.StringField `ddl:"len=65536"`
 	FTS            sq.AnyField    `ddl:"dialect=postgres type=TSVECTOR index={. using=gin}"`
-	// TODO: figure out why the FTS field is not being ignored by SQLite.
 }
 
 type NOTE_FTS struct {
