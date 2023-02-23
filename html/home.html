@@ -41,6 +41,7 @@ let view = new EditorView(document.body, {state});
 // Why is pasteEvent.clipboardData always empty? Debug that.
 // https://web.archive.org/web/20160323212029/http://joelb.me/blog/2011/code-snippet-accessing-clipboard-images-with-javascript/
 // Investigate whether it is because it has to be pasted into an empty contenteditable div.
+// Then investigate if it works when pasted into a plain div, not a prosemirror div.
 let proseMirror = document.querySelector(".ProseMirror");
 if (proseMirror) {
   proseMirror.onpaste = function(pasteEvent) {
