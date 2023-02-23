@@ -18,6 +18,7 @@
     <p class="mr3"><a href="/register">Create An Account</a>
     {{- end }}
 </div>
+<img id="preview" src="#">
 <script type="module">
 import {schema} from "/esmodules/prosemirror-schema-basic@1.2.1.js.gz";
 import {EditorState} from "/esmodules/prosemirror-state@1.4.2.js.gz";
@@ -35,4 +36,18 @@ let state = EditorState.create({
   ]
 });
 let view = new EditorView(document.body, {state});
+// https://www.techiedelight.com/paste-image-from-clipboard-using-javascript/
+// https://stackoverflow.com/questions/4459379/preview-an-image-before-it-is-uploaded
+// Why is pasteEvent.clipboardData always empty? Debug that.
+let proseMirror = document.querySelector(".ProseMirror");
+if (proseMirror) {
+  proseMirror.onpaste = function(pasteEvent) {
+    pasteEvent.clipboardData.getData("image/jpg");
+    var item = (pasteEvent.clipboardData || pasteEvent.originalEvent.clipboardData).items[0];
+    if (item) {
+      window.item = item;
+    }
+    window.pasteEvent = pasteEvent;
+  }
+}
 </script>
