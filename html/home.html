@@ -36,29 +36,22 @@ let state = EditorState.create({
     keymap(baseKeymap),
   ]
 });
-// let view = new EditorView(document.body, {state});
-// https://www.techiedelight.com/paste-image-from-clipboard-using-javascript/
-// https://stackoverflow.com/questions/4459379/preview-an-image-before-it-is-uploaded
-// Why is pasteEvent.clipboardData always empty? Debug that.
-// https://web.archive.org/web/20160323212029/http://joelb.me/blog/2011/code-snippet-accessing-clipboard-images-with-javascript/
-// Investigate whether it is because it has to be pasted into an empty contenteditable div.
-// Then investigate if it works when pasted into a plain div, not a prosemirror div.
-// https://stackoverflow.com/a/60504540/3030828
-// Oh my god I figured it out. It's because the actual clipboardData never lives beyond the scope of the callback function. If there are any files in the callback function, move it out to some other variable or else the clipboardData will be wiped once the function exits.
+let view = new EditorView(document.body, {state});
 let proseMirror = document.querySelector(".ProseMirror");
 if (proseMirror) {
-  /*proseMirror.onpaste = function(pasteEvent) {
-    pasteEvent.clipboardData.getData("image/jpg");
-    var item = (pasteEvent.clipboardData || pasteEvent.originalEvent.clipboardData).items[0];
-    if (item) {
-      window.item = item;
+  proseMirror.addEventListener("paste", function(event) {
+    for (let item of event.clipboardData.items) {
+      if (item.type.startsWith("image/")) {
+        let img = document.querySelector("img");
+        let src = URL.createObjectURL(item.getAsFile());
+        console.log(src);
+        img.src = src;
+        img.onload = function() {
+          URL.revokeObjectURL(src);
+        }
+        break;
+      }
     }
-    window.pasteEvent = pasteEvent;
-  }*/
+  });
 }
-document.querySelector("div[contenteditable=true]").addEventListener("paste", function(event) {
-  console.log("ree");
-  console.log(event.clipboardData.items[0]);
-  window.event = event;
-});
 </script>
