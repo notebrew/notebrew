@@ -21,19 +21,12 @@ image/<imageID>
 /note/?new renders a form to create a new note. It does a POST to /note/ and redirects to /note/<id>/
 /note/<id>/?edit renders a form to edit note <id>. It does a POST to /note/<id> and redirects to /note/<id>/
 
-Read(name string) ([]byte, error)
-Write(name string, data []byte) error
-Remove(name string)
+- note
+GET /note
+GET /note/<noteNum>
+POST /note
+POST /note/<noteNum>
+notes really are just plaintext with associated images. No markdown, no inline styling.
 
-Open() (fs.File, error)
-
-type FS interface{
-    Open() (fs.File, error)
-    OpenWriter() (io.WriteCloser, error)
-}
-
-type File interface{
-    Read(p []byte) (n int64, error)
-    Write(p []byte) (n int64, error)
-    Close() error
-}
+blog
+post
