@@ -32,7 +32,7 @@ func (app *App) Root(w http.ResponseWriter, r *http.Request) {
 	if segments[0] == "" {
 		var templateData TemplateData
 		_, templateData.LoggedIn = app.CurrentUserID(r)
-		tmpl, err := template.ParseFiles("html/home.html")
+		tmpl, err := template.ParseFiles("html/test.html")
 		if err != nil {
 			app.Error(w, r, http.StatusInternalServerError, err)
 			return
