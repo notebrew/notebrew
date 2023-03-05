@@ -37,17 +37,37 @@ body {
   grid-template-columns: 1fr 40rem 1fr;
   grid-template-rows: 64px 1fr;
   grid-template-areas:
-    "nav nav nav"
+    "top top top"
     "left-gutter main right-gutter";
   font-family: "Helvetica", "Arial", sans-serif;
   line-height: 1.5;
   color: #566b78;
 }
 
-#nav { grid-area: nav; }
-#left-gutter { grid-area: left-gutter; }
-#main { grid-area: main; }
-#right-gutter { grid-area: right-gutter; }
+#top {
+  grid-area: top;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+#top > div {
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  border: 2px solid black;
+}
+
+#left-gutter {
+  grid-area: left-gutter;
+}
+
+#main {
+  grid-area: main;
+}
+
+#right-gutter {
+  grid-area: right-gutter;
+}
 
 h2 {
   margin-top: 1em;
