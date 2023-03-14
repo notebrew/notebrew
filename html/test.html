@@ -21,8 +21,8 @@
   globalHeader.style.backgroundColor = "black";
   globalHeader.innerText = "globalHeader";
   document.body.prepend(globalHeader);
-  const marginTop = parseInt(document.body.style.marginTop, 10) || 0;
-  const height = parseInt(globalHeader.style.height, 10) || 0;
+  const marginTop = parseInt(document.body.style.marginTop) || 0;
+  const height = parseInt(globalHeader.style.height) || 0;
   document.body.style.marginTop = `${marginTop + height}px`;
   console.log("hello world!");
 </script>
